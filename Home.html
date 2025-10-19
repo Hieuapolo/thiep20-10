@@ -1,0 +1,871 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="home.css">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          /* Responsive base font - tự động phóng to trên điện thoại */
+          html { font-size: 16px; }
+
+          /* Reset mặc định + safe-area nhưng dùng fallback 0 để không sinh khoảng thừa khi không cần */
+          body {
+            margin: 0;
+            padding: 0;
+            /* safe-area cho iOS, fallback 0 */
+            padding-top: env(safe-area-inset-top, 0);
+            font-size: clamp(16px, 4vw, 20px); /* 16–20px theo kích thước màn hình */
+            display: flex;
+            align-items: flex-end; /* giữ hoa ở gần đáy màn hình */
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+          }
+
+          /* Tăng kích thước hoa (bỏ scale nhỏ), kéo lên bằng margin-top âm */
+          .flowers {
+            margin-top: -6vmin; /* kéo lên để loại khoảng thừa phía trên */
+            position: relative;
+            top: 0;
+            transform: scale(1) translateZ(0); /* scale 1 để hoa không nhỏ */
+            transition: transform 240ms ease, margin-top 240ms ease;
+          }
+
+          /* Nếu vẫn cần chỉnh thêm cho màn hình nhỏ */
+          @media (max-width: 480px) {
+            .flowers {
+              margin-top: -10vmin; /* nhiều hơn trên màn nhỏ nếu vẫn thấy khoảng */
+              transform: scale(1.02); /* hơi phóng to trên điện thoại */
+            }
+            /* giảm khoảng bottom của thân hoa để phần đầu lên cao hơn */
+            .flower { bottom: 6vmin !important; }
+            .flower__line { height: 48vmin !important; } /* thu nhỏ chiều cao thân trên màn nhỏ */
+          }
+
+          /* Overlay lời chúc */
+          .greeting-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.45);
+            z-index: 40;
+            padding: 20px;
+          }
+          .greeting-overlay.active { display: flex; }
+
+          /* greeting box + button màu hồng */
+          .greeting-box {
+            background: #fff0f7;
+            color: #9b0d5a;
+            max-width: 420px;
+            width: 100%;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(214,51,132,0.12);
+            text-align: center;
+            font-size: 1rem;
+          }
+
+          .greeting-box h2 { margin: 0 0 12px; color: #d63384; }
+          .greeting-box p { margin: 0 0 18px; color: #5b2230; }
+
+          .greeting-close {
+            background: linear-gradient(90deg,#ff7fb3,#d63384);
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 6px 16px rgba(214,51,132,0.12);
+          }
+
+          /* rotate overlay */
+          .rotate-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            z-index: 9999;
+            text-align: center;
+            padding: 20px;
+          }
+          .rotate-overlay.active { display: flex; }
+          .rotate-box {
+            max-width: 420px;
+            width: 100%;
+            background: rgba(0,0,0,0.6);
+            padding: 18px;
+            border-radius: 10px;
+            backdrop-filter: blur(6px);
+          }
+          .rotate-box p { margin: 0 0 12px; font-size: 1.05rem; }
+          .rotate-box button {
+            background: #fff;
+            color: #000;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+          }
+          @media (orientation: landscape) {
+            /* overlay vẫn hiển thị trên ngang để gợi ý bật fullscreen */
+            /* (bỏ ẩn mặc định) */
+          }
+
+          /* Envelope (thư nhỏ) — màu tối hơn để dễ nhìn hơn */
+          .envelope {
+            position: absolute;
+            right: 5vmin;
+            bottom: 20vmin;
+            width: 11vmin;
+            height: 8.8vmin;
+            /* nền hồng nhẹ nhưng có độ tương phản hơn */
+            background: linear-gradient(180deg,#ffe6f2 0,#fff 60%);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(182,23,84,0.20);
+            border: 1px solid rgba(182,23,84,0.18);
+            display: block;
+            z-index: 50;
+            cursor: pointer;
+            padding: 0;
+            perspective: 520px;
+            overflow: visible;
+          }
+          .envelope:focus { outline: 3px solid rgba(182,23,84,0.22); }
+
+          /* nắp phong thư (flap) */
+          .envelope .flap {
+            position: absolute;
+            top: -3px;
+            left: 4%;
+            width: 92%;
+            height: 62%;
+            /* flap dịu, ít bão hòa để chữ nổi hơn */
+            background: linear-gradient(135deg,#ffb6d6 0,#fff3f9 60%);
+            clip-path: polygon(50% 0, 100% 100%, 0 100%);
+            transform-origin: top center;
+            transform: rotateX(0deg);
+            transition: transform 360ms cubic-bezier(.2,.9,.2,1), box-shadow 200ms;
+            box-shadow: 0 8px 18px rgba(182,23,84,0.16);
+            z-index: 30;
+            pointer-events: none;
+          }
+
+          /* tờ giấy bên trong (letter) */
+          .envelope .paper {
+            position: absolute;
+            left: 7%;
+            right: 7%;
+            bottom: 6%;
+            height: 66%;
+            /* giấy sáng trắng giúp chữ hiển thị tốt */
+            background: linear-gradient(180deg,#fff,#fffefc);
+            border-radius: 5px;
+            box-shadow: 0 12px 28px rgba(182,23,84,0.10);
+            transform: translateY(18%);
+            transition: transform 380ms cubic-bezier(.2,.9,.2,1);
+            z-index: 20;
+            overflow: hidden;
+            padding: 9% 9%;
+            box-sizing: border-box;
+          }
+
+          /* khi mở: flap nâng lên và giấy trồi lên (giữ hồng) */
+          .envelope.open .flap {
+            transform: rotateX(-160deg) translateY(-8%);
+            box-shadow: 0 22px 40px rgba(182,23,84,0.20);
+          }
+          .envelope.open .paper {
+            transform: translateY(-52%);
+          }
+
+          /* đường kẻ mô phỏng nội dung thư — đậm hơn để hiện rõ */
+          .paper .lines { position: relative; height: 100%; }
+          .paper .line {
+            height: 0.28rem;
+            background: linear-gradient(90deg, rgba(0,0,0,0.12), rgba(0,0,0,0.08));
+            margin-bottom: 6px;
+            border-radius: 2px;
+            width: 100%;
+            opacity: 0.98;
+          }
+          .paper .line.short { width: 70%; }
+
+          /* con tem — đậm, chữ/trái tim trắng */
+          .paper .stamp {
+            position: absolute;
+            top: 8%;
+            right: 8%;
+            width: 2.4vmin;
+            height: 2.4vmin;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #ffd4e6, #e61f7a 60%);
+            box-shadow: inset 0 -2px 4px rgba(0,0,0,0.06), 0 3px 8px rgba(182,23,84,0.16);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2vmin;
+            color: #fff;
+            z-index: 25;
+          }
+
+          /* greeting box + button: nền trắng chữ tối, nút hồng đậm */
+          .greeting-box {
+            background: #ffffff;
+            color: #4a1228;
+            max-width: 420px;
+            width: 100%;
+            padding: 22px;
+            border-radius: 12px;
+            box-shadow: 0 14px 36px rgba(182,23,84,0.14);
+            text-align: center;
+            font-size: 1rem;
+            border: 1px solid rgba(182,23,84,0.06);
+          }
+
+          .greeting-box h2 { margin: 0 0 10px; color: #b71c58; }
+          .greeting-box p { margin: 0 0 16px; color: #3b1620; }
+
+          .greeting-close {
+            background: linear-gradient(90deg,#d81b60,#b71c58);
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: 0 8px 20px rgba(182,23,84,0.12);
+          }
+
+          @media (max-width: 480px) {
+            .envelope { right: 3vmin; bottom: 16vmin; width: 16vmin; height: 12vmin; }
+            .paper .stamp { width: 3.4vmin; height: 3.4vmin; font-size: 1.6vmin; }
+            .greeting-box { padding: 14px; }
+          }
+
+          /* thêm styles cho nút nhạc + ẩn player YouTube */
+          .music-btn {
+            position: absolute;
+            right: 5vmin;
+            bottom: 31vmin;
+            width: 3.6vmin;
+            height: 3.6vmin;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(90deg,#ff7fb3,#d63384);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2vmin;
+            box-shadow: 0 6px 18px rgba(182,23,84,0.18);
+            cursor: pointer;
+            z-index: 60;
+          }
+          .music-btn[aria-pressed="true"] { box-shadow: 0 10px 26px rgba(182,23,84,0.24); transform: translateY(-2px); }
+
+          /* ẩn iframe player (chạy âm thanh nhưng không hiển thị video) */
+          #ytPlayer { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+@media (max-width:480px) {
+            .music-btn { right: 3vmin; bottom: 26vmin; width: 5vmin; height: 5vmin; font-size: 2vmin; }
+          }
+          /* "made by" badge ở góc dưới bên trái */
+          .made-by {
+            position: fixed;
+            left: env(safe-area-inset-left, 12px);
+            bottom: env(safe-area-inset-bottom, 8px);
+            background: rgba(0,0,0,0.48);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            z-index: 120;
+            pointer-events: none; /* không chặn tương tác */
+            backdrop-filter: blur(4px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.28);
+          }
+        </style>
+    </head>  
+    
+    <body class="not-loaded">
+        <!-- Overlay lời chúc -->
+        <div class="greeting-overlay" id="greetingOverlay" role="dialog" aria-hidden="true">
+          <div class="greeting-box" role="document">
+            <h2>Chúc mừng 20/10!</h2>
+            <p>Chúc bạn luôn vui vẻ, học giỏi, xinh đẹp, ăn mau chóng lớn và gặp thật nhiều điều may mắn trong cuộc sống.</p>
+            <p> kí tên: Mấy thằng đực rựa</p>
+            <button class="greeting-close" id="greetingClose">Đóng</button>
+          </div>
+        </div>
+
+        <!-- rotate prompt -->
+        <div class="rotate-overlay" id="rotateOverlay" aria-hidden="true">
+          <div class="rotate-box" role="dialog" aria-labelledby="rotateTitle">
+            <p id="rotateTitle">Bạn đang xoay ngang — muốn vào chế độ toàn màn hình?</p>
+            <div style="display:flex;gap:10px;justify-content:center">
+              <button id="rotateFullscreenBtn">Bật fullscreen</button>
+              <button id="rotateDismissBtn">Đóng</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="night"></div>
+        <div class="flowers">
+          <div class="flower flower--1">
+            <div class="flower__leafs flower__leafs--1">
+              <div class="flower__leaf flower__leaf--1"></div>
+              <div class="flower__leaf flower__leaf--2"></div>
+              <div class="flower__leaf flower__leaf--3"></div>
+              <div class="flower__leaf flower__leaf--4"></div>
+              
+
+              <div class="flower__white-circle"></div>
+      
+              <div class="flower__light flower__light--1"></div>
+              <div class="flower__light flower__light--2"></div>
+              <div class="flower__light flower__light--3"></div>
+              <div class="flower__light flower__light--4"></div>
+              <div class="flower__light flower__light--5"></div>
+              <div class="flower__light flower__light--6"></div>
+              <div class="flower__light flower__light--7"></div>
+              <div class="flower__light flower__light--8"></div>
+      
+            </div>
+            <div class="flower__line">
+              <div class="flower__line__leaf flower__line__leaf--1"></div>
+              <div class="flower__line__leaf flower__line__leaf--2"></div>
+              <div class="flower__line__leaf flower__line__leaf--3"></div>
+              <div class="flower__line__leaf flower__line__leaf--4"></div>
+              <div class="flower__line__leaf flower__line__leaf--5"></div>
+              <div class="flower__line__leaf flower__line__leaf--6"></div>
+            </div>
+          </div>
+      
+          <div class="flower flower--2">
+            <div class="flower__leafs flower__leafs--2">
+              <div class="flower__leaf flower__leaf--1"></div>
+              <div class="flower__leaf flower__leaf--2"></div>
+              <div class="flower__leaf flower__leaf--3"></div>
+              <div class="flower__leaf flower__leaf--4"></div>
+              <div class="flower__white-circle"></div>
+      
+              <div class="flower__light flower__light--1"></div>
+              <div class="flower__light flower__light--2"></div>
+              <div class="flower__light flower__light--3"></div>
+              <div class="flower__light flower__light--4"></div>
+              <div class="flower__light flower__light--5"></div>
+              <div class="flower__light flower__light--6"></div>
+              <div class="flower__light flower__light--7"></div>
+              <div class="flower__light flower__light--8"></div>
+      
+            </div>
+            <div class="flower__line">
+              <div class="flower__line__leaf flower__line__leaf--1"></div>
+              <div class="flower__line__leaf flower__line__leaf--2"></div>
+              <div class="flower__line__leaf flower__line__leaf--3"></div>
+              <div class="flower__line__leaf flower__line__leaf--4"></div>
+            </div>
+          </div>
+      
+          <div class="flower flower--3">
+            <div class="flower__leafs flower__leafs--3">
+              <div class="flower__leaf flower__leaf--1"></div>
+              <div class="flower__leaf flower__leaf--2"></div>
+              <div class="flower__leaf flower__leaf--3"></div>
+              <div class="flower__leaf flower__leaf--4"></div>
+              <div class="flower__white-circle"></div>
+      
+              <div class="flower__light flower__light--1"></div>
+              <div class="flower__light flower__light--2"></div>
+              <div class="flower__light flower__light--3"></div>
+              <div class="flower__light flower__light--4"></div>
+              <div class="flower__light flower__light--5"></div>
+              <div class="flower__light flower__light--6"></div>
+              <div class="flower__light flower__light--7"></div>
+              <div class="flower__light flower__light--8"></div>
+      
+            </div>
+            <div class="flower__line">
+              <div class="flower__line__leaf flower__line__leaf--1"></div>
+              <div class="flower__line__leaf flower__line__leaf--2"></div>
+              <div class="flower__line__leaf flower__line__leaf--3"></div>
+              <div class="flower__line__leaf flower__line__leaf--4"></div>
+            </div>
+          </div>
+      
+          <div class="grow-ans" style="--d:1.2s">
+            <div class="flower__g-long">
+              <div class="flower__g-long__top"></div>
+              <div class="flower__g-long__bottom"></div>
+            </div>
+          </div>
+      
+          <div class="growing-grass">
+            <div class="flower__grass flower__grass--1">
+              <div class="flower__grass--top"></div>
+              <div class="flower__grass--bottom"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--1"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--2"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--3"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--4"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--5"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--6"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--7"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--8"></div>
+              <div class="flower__grass__overlay"></div>
+            </div>
+          </div>
+      
+          <div class="growing-grass">
+            <div class="flower__grass flower__grass--2">
+              <div class="flower__grass--top"></div>
+              <div class="flower__grass--bottom"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--1"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--2"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--3"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--4"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--5"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--6"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--7"></div>
+              <div class="flower__grass__leaf flower__grass__leaf--8"></div>
+              <div class="flower__grass__overlay"></div>
+            </div>
+          </div>
+      
+          <div class="grow-ans" style="--d:2.4s">
+            <div class="flower__g-right flower__g-right--1">
+              <div class="leaf"></div>
+            </div>
+          </div>
+      
+          <div class="grow-ans" style="--d:2.8s">
+            <div class="flower__g-right flower__g-right--2">
+              <div class="leaf"></div>
+            </div>
+          </div>
+      
+          <div class="grow-ans" style="--d:2.8s">
+            <div class="flower__g-front">
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--1">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--2">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--3">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--4">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--5">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--6">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--7">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__leaf-wrapper flower__g-front__leaf-wrapper--8">
+                <div class="flower__g-front__leaf"></div>
+              </div>
+              <div class="flower__g-front__line"></div>
+            </div>
+          </div>
+      
+          <div class="grow-ans" style="--d:3.2s">
+            <div class="flower__g-fr">
+              <div class="leaf"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--1"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--2"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--3"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--4"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--5"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--6"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--7"></div>
+              <div class="flower__g-fr__leaf flower__g-fr__leaf--8"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--0">
+            <div class="grow-ans" style="--d:3s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:2.2s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.4s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.6s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--1">
+            <div class="grow-ans" style="--d:3.6s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.8s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:4s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.2s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--2">
+            <div class="grow-ans" style="--d:4s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.2s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.4s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.6s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--3">
+            <div class="grow-ans" style="--d:4s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.2s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:3s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.6s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--4">
+            <div class="grow-ans" style="--d:4s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.2s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:3s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.6s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--5">
+            <div class="grow-ans" style="--d:4s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.2s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:3s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.6s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--6">
+            <div class="grow-ans" style="--d:4.2s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.4s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.6s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:4.8s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+      
+          <div class="long-g long-g--7">
+            <div class="grow-ans" style="--d:3s">
+              <div class="leaf leaf--0"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.2s">
+              <div class="leaf leaf--1"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.5s">
+              <div class="leaf leaf--2"></div>
+            </div>
+            <div class="grow-ans" style="--d:3.6s">
+              <div class="leaf leaf--3"></div>
+            </div>
+          </div>
+          <div class="flower flower--4">
+            <div class="flower__leafs flower__leafs--4">
+              <div class="flower__leaf flower__leaf--1"></div>
+              <div class="flower__leaf flower__leaf--2"></div>
+              <div class="flower__leaf flower__leaf--3"></div>
+              <div class="flower__leaf flower__leaf--4"></div>
+              <div class="flower__white-circle"></div>
+      
+              <div class="flower__light flower__light--1"></div>
+              <div class="flower__light flower__light--2"></div>
+              <div class="flower__light flower__light--3"></div>
+              <div class="flower__light flower__light--4"></div>
+              <div class="flower__light flower__light--5"></div>
+              <div class="flower__light flower__light--6"></div>
+              <div class="flower__light flower__light--7"></div>
+              <div class="flower__light flower__light--8"></div>
+      
+            </div>
+            <div class="flower__line">
+              <div class="flower__line__leaf flower__line__leaf--1"></div>
+              <div class="flower__line__leaf flower__line__leaf--2"></div>
+              <div class="flower__line__leaf flower__line__leaf--3"></div>
+              <div class="flower__line__leaf flower__line__leaf--4"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- small envelope button beside flowers -->
+        <button id="envelopeBtn" class="envelope" aria-label="Mở thư chúc mừng" aria-haspopup="dialog" title="Nhấn để mở thư">
+          <span class="flap" aria-hidden="true"></span>
+          <div class="paper" aria-hidden="true">
+            <div class="stamp" aria-hidden="true">❤</div>
+            <div class="lines" aria-hidden="true">
+              <div class="line"></div>
+              <div class="line"></div>
+              <div class="line"></div>
+              <div class="line short"></div>
+            </div>
+          </div>
+        </button>
+
+        <!-- YouTube player ẩn + nút nhạc -->
+        <div id="ytPlayer" aria-hidden="true"></div>
+        <button id="musicBtn" class="music-btn" aria-pressed="false" title="Bật/tắt nhạc">🔈</button>
+
+        <script>
+          // ---------- YouTube IFrame API (video n37A3r6fJuo) ----------
+          let ytPlayer = null;
+          function onYouTubeIframeAPIReady() {
+            ytPlayer = new YT.Player('ytPlayer', {
+              height: '0', width: '0',
+              videoId: 'n37A3r6fJuo',
+              playerVars: {
+                autoplay: 1,
+                controls: 0,
+                loop: 1,
+                playlist: 'n37A3r6fJuo',
+                rel: 0,
+                modestbranding: 1,
+                iv_load_policy: 3,
+                playsinline: 1
+              },
+              events: {
+                onReady: (e) => {
+                  try { e.target.mute(); e.target.playVideo(); } catch (err) { console.warn(err); }
+                  updateMusicUI();
+                },
+                onStateChange: () => { updateMusicUI(); }
+              }
+            });
+          }
+          (function(){ const s=document.createElement('script'); s.src="https://www.youtube.com/iframe_api"; document.head.appendChild(s); })();
+ 
+          const musicBtn = document.getElementById('musicBtn');
+          function safe(fn){ try{ fn(); }catch{} }
+          function isYTReady(){ return !!(window.YT && ytPlayer); }
+          function isMuted(){ try { return isYTReady() ? ytPlayer.isMuted() : true; } catch { return true; } }
+          function isPlaying(){ try { return isYTReady() ? ytPlayer.getPlayerState() === YT.PlayerState.PLAYING : false; } catch { return false; } }
+          function updateMusicUI(){
+            if(!musicBtn) return;
+            const muted = isMuted();
+            const playing = isPlaying() && !muted;
+            musicBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+            musicBtn.textContent = muted ? '🔈' : (playing ? '▮▮' : '▶');
+          }
+
+          async function tryPlayUnmuted(){
+            if(!isYTReady()) return;
+            try{ ytPlayer.unMute(); ytPlayer.playVideo(); } catch (err) { console.warn('unmute/play failed:', err); }
+            updateMusicUI();
+          }
+          function muteAndPause(){
+            if(!isYTReady()) return;
+            safe(()=> ytPlayer.mute());
+            safe(()=> ytPlayer.pauseVideo());
+            updateMusicUI();
+          }
+
+          musicBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if(!isYTReady()) return;
+            if (isMuted()) tryPlayUnmuted(); else muteAndPause();
+          });
+
+          // khi người dùng mở phong thư => coi là tương tác rõ ràng -> cố gắng bỏ mute và phát
+          document.getElementById('envelopeBtn').addEventListener('click', (e) => {
+            tryPlayUnmuted();
+          });
+
+          // cập nhật UI nếu API sẵn sàng sau 1s
+          setTimeout(updateMusicUI, 900);
+          // -----------------------------------------------------------
+
+            onload = () => {
+                const c = setTimeout(() => {
+                document.body.classList.remove("not-loaded");
+                clearTimeout(c);
+                }, 1000);
+            };
+
+            const greetingOverlay = document.getElementById('greetingOverlay');
+            const greetingClose = document.getElementById('greetingClose');
+            const envelopeBtn = document.getElementById('envelopeBtn');
+
+            function showGreeting() {
+              if (!greetingOverlay) return;
+              if (greetingOverlay.classList.contains('active')) return;
+              greetingOverlay.classList.add('active');
+              document.body.style.overflow = 'hidden';
+              greetingOverlay.setAttribute('aria-hidden', 'false');
+            }
+
+            function hideGreeting() {
+              if (!greetingOverlay) return;
+              greetingOverlay.classList.remove('active');
+              document.body.style.overflow = '';
+              greetingOverlay.setAttribute('aria-hidden', 'true');
+              // đóng chữ thư animation state
+              envelopeBtn.classList.remove('open');
+            }
+
+            // Đóng khi bấm nút Đóng
+            greetingClose.addEventListener('click', (e) => {
+              e.stopPropagation();
+              hideGreeting();
+            });
+
+            // Đóng khi chạm vào nền overlay (ngoài hộp)
+            greetingOverlay.addEventListener('click', (e) => {
+              if (e.target === greetingOverlay) {
+                e.stopPropagation();
+                hideGreeting();
+              }
+            });
+
+            // === Huỷ bỏ auto-show: không còn timeout / document touch/click để bật lời chúc ===
+            // Thay bằng hành vi: chỉ mở khi người dùng bấm/chạm vào biểu tượng thư (envelope).
+            envelopeBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              // bật trạng thái "flap" cho cảm giác mở
+              envelopeBtn.classList.add('open');
+              // mở hộp lời chúc
+              showGreeting();
+              // focus vào hộp để truy cập bằng bàn phím
+              greetingOverlay.querySelector('.greeting-box')?.focus?.();
+            });
+
+            // hỗ trợ bàn phím trên nút envelope
+            envelopeBtn.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                envelopeBtn.click();
+              }
+            });
+
+            // giữ logic rotate overlay (sửa để landscape => gợi ý fullscreen; portrait => gợi ý xoay)
+            (function(){
+              const rotateOverlay = document.getElementById('rotateOverlay');
+              const rotateDismissBtn = document.getElementById('rotateDismissBtn');
+              const rotateFsBtn = document.getElementById('rotateFullscreenBtn');
+              const titleEl = document.getElementById('rotateTitle');
+
+              function showRotate() {
+                if (!rotateOverlay) return;
+                rotateOverlay.classList.add('active');
+                rotateOverlay.setAttribute('aria-hidden','false');
+              }
+              function hideRotate() {
+                if (!rotateOverlay) return;
+                rotateOverlay.classList.remove('active');
+                rotateOverlay.setAttribute('aria-hidden','true');
+              }
+
+              async function enterFullscreen() {
+                const el = document.documentElement;
+                const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+                if (!req) return false;
+                try { await req.call(el); return true; } catch (err) { console.warn('requestFullscreen failed', err); return false; }
+              }
+
+              // Hiển thị overlay với nội dung khác nhau tùy orientation:
+              //  - landscape (trên thiết bị nhỏ): gợi ý bật fullscreen (hiện nút)
+              //  - portrait (trên thiết bị nhỏ): gợi ý xoay ngang (ẩn nút fullscreen)
+              function checkOrientation() {
+                const mm = window.matchMedia;
+                const isLandscape = mm && mm('(orientation: landscape)').matches;
+                const isPortrait = mm && mm('(orientation: portrait)').matches;
+                const isSmall = Math.max(window.innerWidth, window.innerHeight) <= 900; // ngưỡng device nhỏ
+
+                if (!isSmall) {
+                  // desktop/tablet lớn: ẩn overlay
+                  hideRotate();
+                  return;
+                }
+
+                if (isLandscape) {
+                  // đang ở ngang -> đề xuất fullscreen (hiện nút)
+                  if (titleEl) titleEl.textContent = 'Bạn đang ở chế độ ngang — muốn vào chế độ toàn màn hình?';
+                  if (rotateFsBtn) rotateFsBtn.style.display = '';
+                  showRotate();
+                } else if (isPortrait) {
+                  // đang ở dọc -> đề xuất xoay ngang (ẩn nút fullscreen)
+                  if (titleEl) titleEl.textContent = 'Xoay ngang để có trải nghiệm tốt hơn';
+                  if (rotateFsBtn) rotateFsBtn.style.display = 'none';
+                  showRotate();
+                } else {
+                  hideRotate();
+                }
+              }
+
+              window.addEventListener('orientationchange', checkOrientation, {passive:true});
+              window.addEventListener('resize', checkOrientation, {passive:true});
+              document.addEventListener('visibilitychange', checkOrientation);
+              setTimeout(checkOrientation, 120);
+
+              // nút Đóng
+              rotateDismissBtn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideRotate();
+              });
+
+              // nút Bật fullscreen (tuỳ chọn) — chỉ có tác dụng khi hiện nút
+              rotateFsBtn?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await enterFullscreen();
+                hideRotate();
+              });
+
+              // đóng bằng cách chạm ngoài hộp
+              rotateOverlay?.addEventListener('click', (e) => {
+                if (e.target === rotateOverlay) hideRotate();
+              });
+            })();
+          </script>
+        <div class="made-by" aria-hidden="true">made by Lang</div>
+      </body>
+</html>

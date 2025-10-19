@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dòng lệnh chạy xuống (hồng trên nền đen)</title>
+<style>
+  html, body { height:100%; margin:0; background:#000; }
+  canvas { display:block; width:100%; height:100%; }
+
+  /* Glass message overlay */
+  #glassMessage {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    padding: 20px 28px; /* tăng padding */
+    border-radius: 12px;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    font: 700 28px monospace; /* chữ lớn hơn */
+    text-transform: none;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    opacity: 0;
+    /* added left/top transition so moving is smooth */
+    transition: opacity 600ms ease, transform 600ms cubic-bezier(.2,.9,.2,1), left 420ms ease, top 420ms ease;
+    pointer-events: none;
+    white-space: nowrap;
+    will-change: opacity, transform, left, top;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px; /* tăng khoảng cách */
+  }
+  #glassMessage.show {
+    opacity: 1;
+    transform: translate(-50%,-50%) scale(1);
+  }
+
+  /* progress bar */
+  .progress-wrap {
+    width: 340px; /* rộng hơn */
+    max-width: calc(100vw - 40px);
+    height: 12px; /* dày hơn */
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(200,200,200,0.9));
+    transition: width 0.06s linear;
+  }
+  .progress-pct {
+    color: #fff;
+    font: 700 16px monospace; /* chữ % lớn hơn */
+    margin-top: 6px;
+    opacity: 0.95;
+  }
+
+  /* loading image shown under progress */
+  .loading-img {
+    width: 220px; /* lớn hơn */
+    max-width: 48vw;
+    height: auto;
+    margin-top: 10px;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.6);
+    display: block;
+    opacity: 1;
+    transition: opacity 280ms ease, transform 220ms ease;
+  }
+  /* hide loading image when finished */
+  .loading-img.hidden {
+    opacity: 0;
+    transform: scale(0.98);
+    pointer-events: none;
+    visibility: hidden;
+    display: none;
+  }
+
+  /* final image wrapper + caption */
+  .final-wrap {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column; /* caption above image */
+    align-items: center;
+    margin-top: 12px;
+    gap: 8px;
+  }
+  .final-wrap.hidden { display: none; opacity: 0; }
+  .final-caption {
+    /* now placed above the image (not absolute) */
+    position: static;
+    transform: none;
+    color: #fff;
+    font: 700 22px monospace;
+    text-shadow: 0 6px 18px rgba(0,0,0,0.65);
+    background: rgba(0,0,0,0.28);
+    padding: 6px 12px;
+    border-radius: 8px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* final image shown after complete */
+  .final-img {
+    width: 260px;        /* giảm từ 360px xuống 260px */
+    max-width: 60vw;    /* giới hạn chiều rộng theo viewport */
+    height: auto;
+    margin-top: 12px;
+    border-radius: 12px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+    transition: opacity 280ms ease, transform 220ms ease;
+    opacity: 1;
+    visibility: visible;
+  }
+  .final-img.hidden {
+    opacity: 0;
+    transform: scale(0.98);
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  /* action buttons (hidden until complete) */
+  .actions {
+    display: none;
+    gap: 12px;
+    margin-top: 12px;
+    position: relative; /* allow normal layout but keep relative for reference */
+  }
+  .actions.show { display: flex; }
+  .actions button {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.16);
+    color: #fff;
+    padding: 10px 18px; /* to hơn */
+    border-radius: 10px;
+    font: 700 15px monospace; /* chữ nút lớn hơn */
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+  }
+  /* when the decline button is moved, make it fixed so it can travel anywhere */
+  #declineBtn.floating {
+    position: fixed;
+    z-index: 9999;
+    transition: left 360ms ease, top 360ms ease, transform 180ms ease;
+    transform: translate(0,0);
+    /* keep visual similar */
+    background: transparent;
+    border-color: rgba(255,255,255,0.16);
+  }
+  .actions button.primary {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.22);
+  }
+  .actions button:active { transform: translateY(1px); }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- glass message element (initially hidden) -->
+<div id="glassMessage" aria-hidden="true" role="status" aria-live="polite">
+  <div class="msg">Đang code bức thư</div>
+
+  <!-- progress UI -->
+  <div class="progress-wrap" aria-hidden="false" aria-label="Tiến trình tải">
+    <div id="progressBar" class="progress-bar"></div>
+  </div>
+  <div id="progressPct" class="progress-pct">0%</div>
+
+  <!-- loading image (shows while loading, hides at 100%) -->
+  <img id="loadingImg"
+       class="loading-img"
+       src="https://2sao.vietnamnetjsc.vn/images/2017/06/07/14/43/Meo-danh-may-AVA.gif"
+       alt="Loading cat" />
+
+  <!-- final image (hidden until loading complete) -->
+  <div id="finalWrap" class="final-wrap hidden" aria-hidden="true">
+    <div id="finalCaption" class="final-caption">Đã code xong</div>
+    <img id="finalImg"
+         class="final-img"
+         src="https://inkythuatso.com/uploads/thumbnails/800/2023/01/10-anh-meme-meo-gio-tay-inkythuatso-17-15-30-44.jpg"
+         alt="Hoàn tất" />
+  </div>
+
+  <!-- actions shown when progress reaches 100% -->
+  <div class="actions" id="actions">
+    <button id="acceptBtn" class="primary" aria-label="Nhận thư">Nhận thư</button>
+    <button id="declineBtn" aria-label="Không nhận">Không nhận</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// thay mảng lệnh bằng hàm sinh chuỗi nhị phân ngẫu nhiên
+function randomBinary(len) {
+  let s = '';
+  for (let i = 0; i < len; i++) s += Math.random() < 0.5 ? '0' : '1';
+  return s;
+}
+
+let fontSize = 16;
+let cols = 1;
+let drops = [];
+let lastTime = 0;
+
+function initDrops() {
+  drops = new Array(cols).fill(0).map((_, i) => ({
+    x: i * fontSize + 4, // column x
+    y: Math.random() * -canvas.height,
+    speed: 20 + Math.random() * 40, // pixels per second (slow)
+    cmd: randomBinary(8 + Math.floor(Math.random() * 32)) // chuỗi 0/1 độ dài ngẫu nhiên
+  }));
+}
+
+function fit() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+  fontSize = Math.max(14, Math.floor(Math.min(canvas.width, canvas.height) / 40));
+  ctx.font = fontSize + 'px monospace';
+  cols = Math.floor(canvas.width / fontSize) || 1;
+  initDrops();
+}
+addEventListener('resize', fit);
+fit();
+
+// message handled by DOM overlay (glass effect)
+const msgEl = document.getElementById('glassMessage');
+const progressBar = document.getElementById('progressBar');
+const progressPct = document.getElementById('progressPct');
+const loadingImg = document.getElementById('loadingImg');
+const finalImg = document.getElementById('finalImg');
+const finalWrap = document.getElementById('finalWrap');
+const messageDelay = 2000; // ms before showing the overlay
+
+function animateProgress(durationMs = 6000) {
+  const start = performance.now();
+  // ensure loading image visible at start
+  if (loadingImg) loadingImg.classList.remove('hidden');
+
+  function step(now) {
+    const t = Math.max(0, Math.min(1, (now - start) / durationMs));
+    const pct = Math.floor(t * 100);
+    if (progressBar) progressBar.style.width = pct + '%';
+    if (progressPct) progressPct.textContent = pct + '%';
+
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressPct) progressPct.textContent = '100%';
+      // hide loading img and progress UI when complete
+      if (loadingImg) loadingImg.classList.add('hidden');
+      const progressWrap = document.querySelector('.progress-wrap');
+      if (progressWrap) progressWrap.style.display = 'none';
+      if (progressPct) progressPct.style.display = 'none';
+      // hide the message text
+      const msgText = msgEl.querySelector('.msg');
+      if (msgText) msgText.style.display = 'none';
+      // show final image
+      const finalWrapEl = document.getElementById('finalWrap');
+      if (finalWrapEl) finalWrapEl.classList.remove('hidden');
+      // show action buttons when complete
+      const actions = document.getElementById('actions');
+      if (actions) actions.classList.add('show');
+      // enable pointer events on overlay so buttons are clickable
+      msgEl.style.pointerEvents = 'auto';
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+setTimeout(() => {
+  msgEl.classList.add('show');
+  msgEl.setAttribute('aria-hidden', 'false');
+  // ensure loading image visible when overlay appears
+  if (loadingImg) loadingImg.classList.remove('hidden');
+  // start progress when the overlay shows; runs for 6000ms (6s)
+  animateProgress(6000);
+}, messageDelay);
+
+// helper: move the decline button to a random on-screen position (keeps button fully visible)
+function moveDeclineBtnRandomly(pad = 12) {
+  const btn = document.getElementById('declineBtn');
+  if (!btn) return;
+
+  const w = btn.offsetWidth;
+  const h = btn.offsetHeight;
+
+  const minX = pad;
+  const maxX = Math.max(minX, window.innerWidth - w - pad);
+  const minY = pad;
+  const maxY = Math.max(minY, window.innerHeight - h - pad);
+
+  const x = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
+  const y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
+
+  // make it fixed and move to the computed position (within viewport)
+  btn.classList.add('floating');
+  btn.style.left = x + 'px';
+  btn.style.top = y + 'px';
+  btn.style.zIndex = 9999;
+  btn.style.pointerEvents = 'auto';
+
+  // small pop effect
+  btn.style.transform = 'scale(1.06)';
+  setTimeout(() => {
+    btn.style.transform = 'scale(1)';
+  }, 180);
+}
+
+// actions handlers
+const acceptBtn = document.getElementById('acceptBtn');
+const declineBtn = document.getElementById('declineBtn');
+if (acceptBtn) acceptBtn.addEventListener('click', () => {
+  // chuyển tới Home.html
+  window.location.href = 'Home.html';
+});
+if (declineBtn) declineBtn.addEventListener('click', (e) => {
+  // nếu overlay chưa bật pointer-events thì ignore
+  if (getComputedStyle(msgEl).pointerEvents === 'none') return;
+  // chỉ di chuyển nút "Không nhận" ngẫu nhiên
+  moveDeclineBtnRandomly();
+});
+
+function draw(timestamp = 0) {
+  const dt = Math.min(0.05, (timestamp - lastTime) / 1000) || 0.016;
+  lastTime = timestamp;
+
+  // gentle fade to create smooth trails
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#ff66b3'; // pink
+  ctx.textBaseline = 'top';
+  ctx.font = fontSize + 'px monospace';
+
+  for (let d of drops) {
+    // draw command vertically: one character per row
+    for (let i = 0; i < d.cmd.length; i++) {
+      const ch = d.cmd[i];
+      const y = d.y + i * fontSize;
+      // only draw visible chars for performance
+      if (y > -fontSize && y < canvas.height + fontSize) {
+        ctx.fillText(ch, d.x, y);
+      }
+    }
+
+    // move drop downward slowly (pixels per second)
+    d.y += d.speed * dt;
+
+    // reset when fully below screen
+    if (d.y > canvas.height + d.cmd.length * fontSize + 20) {
+      d.y = - (Math.random() * 200) - d.cmd.length * fontSize;
+      d.speed = 20 + Math.random() * 40;
+      d.cmd = randomBinary(8 + Math.floor(Math.random() * 32)); // sinh lại chuỗi 0/1 khi reset
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

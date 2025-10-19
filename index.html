@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <!-- ...existing code... -->
+  <meta name="viewport" content="width=device-width, initial-scale=1"> <!-- ADDED -->
+  <title>Thiệp mèo tặng hoa</title>
+  <style>
+    /* ...existing code... */
+    html { font-size: 16px; } /* cơ sở cho rem */
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #ffe6f0;
+      margin: 0;
+      padding: 20px;
+      font-size: clamp(18px, 4.5vw, 26px); /* tăng chữ trên điện thoại */
+    }
+    h1 {
+      color: #d63384;
+      font-size: clamp(24px, 6.5vw, 38px); /* responsive lớn hơn trên dt */
+      margin: 10px 0;
+    }
+    p { margin: 8px 0 18px; }
+    img {
+      width: 100%;          /* chiếm chiều ngang khung chứa trên dt */
+      max-width: 420px;     /* giữ kích thước hợp lý trên màn lớn */
+      height: auto;
+      border-radius: 10px;
+      margin: 20px 0;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      cursor: pointer;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Nếu muốn chữ rất lớn trên điện thoại nhỏ hơn 360px */
+    @media (max-width: 360px) {
+      body { font-size: clamp(18px, 5.5vw, 28px); }
+      h1 { font-size: clamp(22px, 8vw, 34px); }
+    }
+    /* ...existing code... */
+  </style>
+</head>
+<body>
+  <h1>❤️ Chúc mừng ngày phụ nữ Việt Nam 20/10 ❤️</h1>
+  <p>Chạm vào ảnh để bắt đầu</p>
+
+  <!-- Ảnh mèo (bỏ thuộc tính width cố định để CSS điều khiển) -->
+  <img src="https://shopgarena.net/wp-content/uploads/2023/07/Meo-Tang-Hoa-Hong-Cute.jpg" 
+       alt="Mèo tặng hoa hồng cute" 
+       onclick="window.location.href='mid.html'">
+
+</body>
+</html>
